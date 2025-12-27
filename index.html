@@ -1,113 +1,107 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>London Churches (Sorted by Size)</title>
-  <style>
-    body {
-      margin: 0;
-      background: #f8f8f8;
-    }
-    svg {
-      width: 100vw;
-      height: 100vh;
-    }
-    path {
-      fill: rgba(0, 100, 200, 0.4);
-      stroke: #003366;
-      stroke-width: 0.5;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Church Polygons by Size</title>
+<style>
+  body {
+    margin: 0;
+    background: #f5f5f5;
+  }
+  svg {
+    width: 100vw;
+    height: 100vh;
+  }
+  path {
+    fill: rgba(100, 149, 237, 0.4);
+    stroke: #1f3a8a;
+    stroke-width: 1;
+  }
+</style>
 </head>
 <body>
 
 <svg id="svg"></svg>
 
 <script>
-async function loadAndRender() {
-  const response = await fetch("churches.geojson");
-  const geojson = await response.json();
+async function run() {
+  const geojson = await fetch("churches.geojson").then(r => r.json());
 
-  // ---- 1. Compute bounding box ----
-  const coords = geojson.features.flatMap(f =>
-    f.geometry.type === "Polygon"
-      ? f.geometry.coordinates.flat(1)
-      : f.geometry.coordinates.flat(2)
-  );
-
-  const lons = coords.map(c => c[0]);
-  const lats = coords.map(c => c[1]);
-
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-
-  // ---- 2. Simple projection (lon/lat → x/y) ----
-  function project([lon, lat]) {
-    const x = (lon - minLon) / (maxLon - minLon) * width;
-    const y = height - (lat - minLat) / (maxLat - minLat) * height;
-    return [x, y];
-  }
-
-  // ---- 3. Polygon area (shoelace formula) ----
-  function polygonArea(coords) {
-    let area = 0;
+  // ---- Utility functions ----
+  function area(coords) {
+    let a = 0;
     for (let i = 0; i < coords.length; i++) {
       const [x1, y1] = coords[i];
       const [x2, y2] = coords[(i + 1) % coords.length];
-      area += x1 * y2 - x2 * y1;
+      a += x1 * y2 - x2 * y1;
     }
-    return Math.abs(area / 2);
+    return Math.abs(a / 2);
   }
 
-  // ---- 4. Compute area for each feature ----
+  function centroid(coords) {
+    let x = 0, y = 0;
+    coords.forEach(c => {
+      x += c[0];
+      y += c[1];
+    });
+    return [x / coords.length, y / coords.length];
+  }
+
+  function normalize(coords) {
+    const c = centroid(coords);
+    return coords.map(([x, y]) => [x - c[0], y - c[1]]);
+  }
+
+  function bounds(coords) {
+    const xs = coords.map(c => c[0]);
+    const ys = coords.map(c => c[1]);
+    return {
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys)
+    };
+  }
+
+  // ---- Compute areas ----
   geojson.features.forEach(f => {
-    let area = 0;
+    const poly = f.geometry.type === "Polygon"
+      ? f.geometry.coordinates[0]
+      : f.geometry.coordinates[0][0];
 
-    if (f.geometry.type === "Polygon") {
-      area = polygonArea(f.geometry.coordinates[0]);
-    } else if (f.geometry.type === "MultiPolygon") {
-      area = f.geometry.coordinates.reduce(
-        (sum, poly) => sum + polygonArea(poly[0]),
-        0
-      );
-    }
-
-    f._area = area;
+    f._coords = poly;
+    f._area = area(poly);
   });
 
-  // ---- 5. Sort by size (small → large) ----
-  geojson.features.sort((a, b) => a._area - b._area);
+  // ---- Sort by size (largest first) ----
+  geojson.features.sort((a, b) => b._area - a._area);
 
   const svg = document.getElementById("svg");
 
-  // ---- 6. Draw polygons ----
-  for (const feature of geojson.features) {
-    const geom = feature.geometry;
-    const polygons = geom.type === "Polygon"
-      ? [geom.coordinates]
-      : geom.coordinates;
+  const padding = 40;
+  const rowHeight = 180;
+  const maxSize = 140;
 
-    for (const poly of polygons) {
-      const pathData = poly[0]
-        .map((c, i) => {
-          const [x, y] = project(c);
-          return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-        })
-        .join(" ") + " Z";
+  geojson.features.forEach((f, i) => {
+    let coords = normalize(f._coords);
+    const b = bounds(coords);
 
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", pathData);
-      svg.appendChild(path);
-    }
-  }
+    // scale to fit
+    const scale = maxSize / Math.max(b.w, b.h);
+    coords = coords.map(([x, y]) => [
+      x * scale + padding,
+      y * scale + padding + i * rowHeight
+    ]);
+
+    const d = coords
+      .map((c, j) => `${j === 0 ? "M" : "L"} ${c[0]} ${c[1]}`)
+      .join(" ") + " Z";
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  });
 }
 
-loadAndRender();
+run();
 </script>
 
 </body>
