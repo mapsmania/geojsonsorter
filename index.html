@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Polygons by Size</title>
+<title>London Churches by Size</title>
 <style>
   body {
     margin: 0;
@@ -22,6 +22,7 @@
     font-size: 12px;
     fill: #111827;
     pointer-events: none;
+    white-space: nowrap;
   }
 </style>
 </head>
@@ -100,8 +101,9 @@ async function run() {
   const screenWidth = window.innerWidth;
 
   const padding = 20;
+  const cardGap = 40;   // ← IMPORTANT CHANGE
   const labelHeight = 16;
-  const minCardWidth = 120; // KEY FIX
+  const minCardWidth = 140;
 
   let cursorX = padding;
   let cursorY = padding;
@@ -118,14 +120,14 @@ async function run() {
     const cardWidth = Math.max(polyWidth, minCardWidth);
     const cardHeight = polyHeight + labelHeight;
 
-    // Wrap to next row
-    if (cursorX + cardWidth + padding > screenWidth) {
+    // Wrap row
+    if (cursorX + cardWidth + cardGap > screenWidth) {
       cursorX = padding;
       cursorY += rowHeight + padding;
       rowHeight = 0;
     }
 
-    // Center polygon inside card
+    // Center polygon
     const offsetX = cursorX + (cardWidth - polyWidth) / 2;
     const offsetY = cursorY;
 
@@ -142,7 +144,7 @@ async function run() {
     path.setAttribute("d", d);
     svg.appendChild(path);
 
-    // Label (centered in card)
+    // Label
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("x", cursorX + cardWidth / 2);
     text.setAttribute("y", cursorY + polyHeight + labelHeight);
@@ -150,7 +152,7 @@ async function run() {
     text.textContent = f.properties?.name ?? "Unnamed";
     svg.appendChild(text);
 
-    cursorX += cardWidth + padding;
+    cursorX += cardWidth + cardGap;
     rowHeight = Math.max(rowHeight, cardHeight);
   });
 }
