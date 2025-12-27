@@ -17,6 +17,12 @@
     stroke: #1e3a8a;
     stroke-width: 1;
   }
+  text {
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    fill: #111827;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -70,7 +76,7 @@ async function run() {
     const poly =
       f.geometry.type === "Polygon"
         ? f.geometry.coordinates[0]
-        : f.geometry.coordinates[0][0]; // simple MultiPolygon handling
+        : f.geometry.coordinates[0][0];
 
     f._coords = poly;
     f._area = area(poly);
@@ -83,6 +89,7 @@ async function run() {
   const width = window.innerWidth;
 
   const padding = 20;
+  const labelHeight = 16;
   const maxSize = 140;
 
   let cursorX = padding;
@@ -111,6 +118,7 @@ async function run() {
       rowHeight = 0;
     }
 
+    // ---- Polygon path ----
     const d = scaled
       .map((c, i) => {
         const x = c[0] + cursorX;
@@ -123,8 +131,16 @@ async function run() {
     path.setAttribute("d", d);
     svg.appendChild(path);
 
+    // ---- Label ----
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", cursorX + boxWidth / 2);
+    text.setAttribute("y", cursorY + boxHeight + labelHeight);
+    text.setAttribute("text-anchor", "middle");
+    text.textContent = f.properties?.name ?? "Unnamed";
+    svg.appendChild(text);
+
     cursorX += boxWidth + padding;
-    rowHeight = Math.max(rowHeight, boxHeight);
+    rowHeight = Math.max(rowHeight, boxHeight + labelHeight);
   });
 }
 
