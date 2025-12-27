@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Polygons by Size</title>
+<title>Church Polygons by Size</title>
 <style>
   body {
     margin: 0;
@@ -13,8 +13,8 @@
     height: 100vh;
   }
   path {
-    fill: rgba(100, 149, 237, 0.4);
-    stroke: #1f3a8a;
+    fill: rgba(70, 130, 180, 0.45);
+    stroke: #1e3a8a;
     stroke-width: 1;
   }
 </style>
@@ -27,7 +27,7 @@
 async function run() {
   const geojson = await fetch("churches.geojson").then(r => r.json());
 
-  // ---- Utility functions ----
+  // ---------- Geometry helpers ----------
   function area(coords) {
     let a = 0;
     for (let i = 0; i < coords.length; i++) {
@@ -40,64 +40,91 @@ async function run() {
 
   function centroid(coords) {
     let x = 0, y = 0;
-    coords.forEach(c => {
-      x += c[0];
-      y += c[1];
+    coords.forEach(([cx, cy]) => {
+      x += cx;
+      y += cy;
     });
     return [x / coords.length, y / coords.length];
   }
 
   function normalize(coords) {
-    const c = centroid(coords);
-    return coords.map(([x, y]) => [x - c[0], y - c[1]]);
+    const [cx, cy] = centroid(coords);
+    return coords.map(([x, y]) => [x - cx, y - cy]);
   }
 
   function bounds(coords) {
     const xs = coords.map(c => c[0]);
     const ys = coords.map(c => c[1]);
     return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
       w: Math.max(...xs) - Math.min(...xs),
       h: Math.max(...ys) - Math.min(...ys)
     };
   }
 
-  // ---- Compute areas ----
+  // ---------- Extract & compute area ----------
   geojson.features.forEach(f => {
-    const poly = f.geometry.type === "Polygon"
-      ? f.geometry.coordinates[0]
-      : f.geometry.coordinates[0][0];
+    const poly =
+      f.geometry.type === "Polygon"
+        ? f.geometry.coordinates[0]
+        : f.geometry.coordinates[0][0]; // simple MultiPolygon handling
 
     f._coords = poly;
     f._area = area(poly);
   });
 
-  // ---- Sort by size (largest first) ----
+  // ---------- Sort largest → smallest ----------
   geojson.features.sort((a, b) => b._area - a._area);
 
   const svg = document.getElementById("svg");
+  const width = window.innerWidth;
 
-  const padding = 40;
-  const rowHeight = 180;
+  const padding = 20;
   const maxSize = 140;
 
-  geojson.features.forEach((f, i) => {
+  let cursorX = padding;
+  let cursorY = padding;
+  let rowHeight = 0;
+
+  // ---------- Draw ----------
+  geojson.features.forEach(f => {
     let coords = normalize(f._coords);
     const b = bounds(coords);
 
-    // scale to fit
     const scale = maxSize / Math.max(b.w, b.h);
-    coords = coords.map(([x, y]) => [
-      x * scale + padding,
-      y * scale + padding + i * rowHeight
+
+    const scaled = coords.map(([x, y]) => [
+      (x - b.minX) * scale,
+      (y - b.minY) * scale
     ]);
 
-    const d = coords
-      .map((c, j) => `${j === 0 ? "M" : "L"} ${c[0]} ${c[1]}`)
+    const boxWidth = b.w * scale;
+    const boxHeight = b.h * scale;
+
+    // Wrap to next row if needed
+    if (cursorX + boxWidth + padding > width) {
+      cursorX = padding;
+      cursorY += rowHeight + padding;
+      rowHeight = 0;
+    }
+
+    const d = scaled
+      .map((c, i) => {
+        const x = c[0] + cursorX;
+        const y = c[1] + cursorY;
+        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+      })
       .join(" ") + " Z";
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
     svg.appendChild(path);
+
+    cursorX += boxWidth + padding;
+    rowHeight = Math.max(rowHeight, boxHeight);
   });
 }
 
