@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Church Polygons by Size</title>
+<title>London Churches by Size</title>
 <style>
   body {
     margin: 0;
@@ -71,12 +71,12 @@ async function run() {
     };
   }
 
-  // ---------- Extract & compute area ----------
+  // ---------- Extract polygons & compute area ----------
   geojson.features.forEach(f => {
     const poly =
       f.geometry.type === "Polygon"
         ? f.geometry.coordinates[0]
-        : f.geometry.coordinates[0][0];
+        : f.geometry.coordinates[0][0]; // basic MultiPolygon support
 
     f._coords = poly;
     f._area = area(poly);
@@ -85,12 +85,22 @@ async function run() {
   // ---------- Sort largest → smallest ----------
   geojson.features.sort((a, b) => b._area - a._area);
 
+  // ---------- Compute global scale ----------
+  const maxDimension = Math.max(
+    ...geojson.features.map(f => {
+      const b = bounds(f._coords);
+      return Math.max(b.w, b.h);
+    })
+  );
+
+  const maxDisplaySize = 140; // px
+  const globalScale = maxDisplaySize / maxDimension;
+
   const svg = document.getElementById("svg");
-  const width = window.innerWidth;
+  const screenWidth = window.innerWidth;
 
   const padding = 20;
   const labelHeight = 16;
-  const maxSize = 140;
 
   let cursorX = padding;
   let cursorY = padding;
@@ -101,24 +111,22 @@ async function run() {
     let coords = normalize(f._coords);
     const b = bounds(coords);
 
-    const scale = maxSize / Math.max(b.w, b.h);
-
     const scaled = coords.map(([x, y]) => [
-      (x - b.minX) * scale,
-      (y - b.minY) * scale
+      (x - b.minX) * globalScale,
+      (y - b.minY) * globalScale
     ]);
 
-    const boxWidth = b.w * scale;
-    const boxHeight = b.h * scale;
+    const boxWidth = b.w * globalScale;
+    const boxHeight = b.h * globalScale;
 
     // Wrap to next row if needed
-    if (cursorX + boxWidth + padding > width) {
+    if (cursorX + boxWidth + padding > screenWidth) {
       cursorX = padding;
       cursorY += rowHeight + padding;
       rowHeight = 0;
     }
 
-    // ---- Polygon path ----
+    // ---- Polygon ----
     const d = scaled
       .map((c, i) => {
         const x = c[0] + cursorX;
