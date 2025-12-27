@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>London Churches (Sorted by Size)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f8f8f8;
+    }
+    svg {
+      width: 100vw;
+      height: 100vh;
+    }
+    path {
+      fill: rgba(0, 100, 200, 0.4);
+      stroke: #003366;
+      stroke-width: 0.5;
+    }
+  </style>
+</head>
+<body>
+
+<svg id="svg"></svg>
+
+<script>
+async function loadAndRender() {
+  const response = await fetch("churches.geojson");
+  const geojson = await response.json();
+
+  // ---- 1. Compute bounding box ----
+  const coords = geojson.features.flatMap(f =>
+    f.geometry.type === "Polygon"
+      ? f.geometry.coordinates.flat(1)
+      : f.geometry.coordinates.flat(2)
+  );
+
+  const lons = coords.map(c => c[0]);
+  const lats = coords.map(c => c[1]);
+
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // ---- 2. Simple projection (lon/lat → x/y) ----
+  function project([lon, lat]) {
+    const x = (lon - minLon) / (maxLon - minLon) * width;
+    const y = height - (lat - minLat) / (maxLat - minLat) * height;
+    return [x, y];
+  }
+
+  // ---- 3. Polygon area (shoelace formula) ----
+  function polygonArea(coords) {
+    let area = 0;
+    for (let i = 0; i < coords.length; i++) {
+      const [x1, y1] = coords[i];
+      const [x2, y2] = coords[(i + 1) % coords.length];
+      area += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(area / 2);
+  }
+
+  // ---- 4. Compute area for each feature ----
+  geojson.features.forEach(f => {
+    let area = 0;
+
+    if (f.geometry.type === "Polygon") {
+      area = polygonArea(f.geometry.coordinates[0]);
+    } else if (f.geometry.type === "MultiPolygon") {
+      area = f.geometry.coordinates.reduce(
+        (sum, poly) => sum + polygonArea(poly[0]),
+        0
+      );
+    }
+
+    f._area = area;
+  });
+
+  // ---- 5. Sort by size (small → large) ----
+  geojson.features.sort((a, b) => a._area - b._area);
+
+  const svg = document.getElementById("svg");
+
+  // ---- 6. Draw polygons ----
+  for (const feature of geojson.features) {
+    const geom = feature.geometry;
+    const polygons = geom.type === "Polygon"
+      ? [geom.coordinates]
+      : geom.coordinates;
+
+    for (const poly of polygons) {
+      const pathData = poly[0]
+        .map((c, i) => {
+          const [x, y] = project(c);
+          return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+        })
+        .join(" ") + " Z";
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", pathData);
+      svg.appendChild(path);
+    }
+  }
+}
+
+loadAndRender();
+</script>
+
+</body>
+</html>
