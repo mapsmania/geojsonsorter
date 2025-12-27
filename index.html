@@ -2,20 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Polygons by Size</title>
+<title>London Churches by Size</title>
 <style>
   body {
     margin: 0;
-    background: #fff;
+    background: #ffffff; /* white background */
   }
   svg {
     width: 100vw;
     height: auto;
     display: block;
+    background: #ffffff; /* white background for SVG */
   }
   path {
-    fill: rgba(70, 130, 180, 0.45);
-    stroke: #000;
+    fill: rgba(0,0,0,0.05); /* subtle fill, optional */
+    stroke: black;          /* black path */
     stroke-width: 1;
   }
   text {
@@ -34,7 +35,6 @@
 async function run() {
   const geojson = await fetch("churches.geojson").then(r => r.json());
 
-  // ---------- Geometry helpers ----------
   function area(coords) {
     let a = 0;
     for (let i = 0; i < coords.length; i++) {
@@ -47,10 +47,7 @@ async function run() {
 
   function centroid(coords) {
     let x = 0, y = 0;
-    coords.forEach(([cx, cy]) => {
-      x += cx;
-      y += cy;
-    });
+    coords.forEach(([cx, cy]) => { x += cx; y += cy; });
     return [x / coords.length, y / coords.length];
   }
 
@@ -72,18 +69,17 @@ async function run() {
     };
   }
 
-  // ---------- Extract polygons ----------
+  // Extract polygons & compute area
   geojson.features.forEach(f => {
     const poly =
       f.geometry.type === "Polygon"
         ? f.geometry.coordinates[0]
         : f.geometry.coordinates[0][0];
-
     f._coords = poly;
     f._area = area(poly);
   });
 
-  // ---------- Sort by area ----------
+  // Sort by area
   geojson.features.sort((a, b) => b._area - a._area);
 
   const svg = document.getElementById("svg");
@@ -91,13 +87,13 @@ async function run() {
 
   const padding = 24;
   const cardGap = 32;
+  const verticalGap = 24;   // smaller vertical gap
   const labelHeight = 18;
   const cardsPerRow = 4;
 
   const cardWidth =
     (screenWidth - padding * 2 - cardGap * (cardsPerRow - 1)) / cardsPerRow;
 
-  // ---------- Global scale based on card width ----------
   const maxDimension = Math.max(
     ...geojson.features.map(f => {
       const b = bounds(f._coords);
@@ -110,15 +106,15 @@ async function run() {
 
   let maxY = 0;
 
-  // ---------- Draw ----------
   geojson.features.forEach((f, i) => {
     const col = i % cardsPerRow;
     const row = Math.floor(i / cardsPerRow);
 
     const cursorX =
       padding + col * (cardWidth + cardGap);
-    const cursorY =
-      padding + row * (cardWidth + labelHeight + cardGap);
+
+    // Use vertical gap instead of full cardWidth
+    const cursorY = padding + row * (maxPolySize + labelHeight + verticalGap);
 
     let coords = normalize(f._coords);
     const b = bounds(coords);
@@ -153,7 +149,6 @@ async function run() {
     maxY = Math.max(maxY, cursorY + polyHeight + labelHeight + padding);
   });
 
-  // ---------- Allow vertical scroll ----------
   svg.setAttribute("height", maxY);
 }
 
