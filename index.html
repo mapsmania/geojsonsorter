@@ -10,7 +10,8 @@
   }
   svg {
     width: 100vw;
-    height: 100vh;
+    height: auto;
+    display: block;
   }
   path {
     fill: rgba(70, 130, 180, 0.45);
@@ -19,10 +20,9 @@
   }
   text {
     font-family: system-ui, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
     fill: #111827;
     pointer-events: none;
-    white-space: nowrap;
   }
 </style>
 </head>
@@ -72,7 +72,7 @@ async function run() {
     };
   }
 
-  // ---------- Extract polygons & compute area ----------
+  // ---------- Extract polygons ----------
   geojson.features.forEach(f => {
     const poly =
       f.geometry.type === "Polygon"
@@ -83,10 +83,21 @@ async function run() {
     f._area = area(poly);
   });
 
-  // ---------- Sort largest → smallest ----------
+  // ---------- Sort by area ----------
   geojson.features.sort((a, b) => b._area - a._area);
 
-  // ---------- Global scale ----------
+  const svg = document.getElementById("svg");
+  const screenWidth = window.innerWidth;
+
+  const padding = 24;
+  const cardGap = 32;
+  const labelHeight = 18;
+  const cardsPerRow = 4;
+
+  const cardWidth =
+    (screenWidth - padding * 2 - cardGap * (cardsPerRow - 1)) / cardsPerRow;
+
+  // ---------- Global scale based on card width ----------
   const maxDimension = Math.max(
     ...geojson.features.map(f => {
       const b = bounds(f._coords);
@@ -94,40 +105,27 @@ async function run() {
     })
   );
 
-  const maxDisplaySize = 140;
-  const globalScale = maxDisplaySize / maxDimension;
+  const maxPolySize = cardWidth * 0.85;
+  const globalScale = maxPolySize / maxDimension;
 
-  const svg = document.getElementById("svg");
-  const screenWidth = window.innerWidth;
-
-  const padding = 20;
-  const cardGap = 40;   // ← IMPORTANT CHANGE
-  const labelHeight = 16;
-  const minCardWidth = 140;
-
-  let cursorX = padding;
-  let cursorY = padding;
-  let rowHeight = 0;
+  let maxY = 0;
 
   // ---------- Draw ----------
-  geojson.features.forEach(f => {
+  geojson.features.forEach((f, i) => {
+    const col = i % cardsPerRow;
+    const row = Math.floor(i / cardsPerRow);
+
+    const cursorX =
+      padding + col * (cardWidth + cardGap);
+    const cursorY =
+      padding + row * (cardWidth + labelHeight + cardGap);
+
     let coords = normalize(f._coords);
     const b = bounds(coords);
 
     const polyWidth = b.w * globalScale;
     const polyHeight = b.h * globalScale;
 
-    const cardWidth = Math.max(polyWidth, minCardWidth);
-    const cardHeight = polyHeight + labelHeight;
-
-    // Wrap row
-    if (cursorX + cardWidth + cardGap > screenWidth) {
-      cursorX = padding;
-      cursorY += rowHeight + padding;
-      rowHeight = 0;
-    }
-
-    // Center polygon
     const offsetX = cursorX + (cardWidth - polyWidth) / 2;
     const offsetY = cursorY;
 
@@ -137,7 +135,7 @@ async function run() {
     ]);
 
     const d = scaled
-      .map((c, i) => `${i === 0 ? "M" : "L"} ${c[0]} ${c[1]}`)
+      .map((c, j) => `${j === 0 ? "M" : "L"} ${c[0]} ${c[1]}`)
       .join(" ") + " Z";
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -152,9 +150,11 @@ async function run() {
     text.textContent = f.properties?.name ?? "Unnamed";
     svg.appendChild(text);
 
-    cursorX += cardWidth + cardGap;
-    rowHeight = Math.max(rowHeight, cardHeight);
+    maxY = Math.max(maxY, cursorY + polyHeight + labelHeight + padding);
   });
+
+  // ---------- Allow vertical scroll ----------
+  svg.setAttribute("height", maxY);
 }
 
 run();
