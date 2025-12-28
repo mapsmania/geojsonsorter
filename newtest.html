@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>London Churches by Size</title>
+<style>
+  body {
+    margin: 0;
+    background: #ffffff;
+  }
+  svg {
+    width: 100vw;
+    height: auto;
+    display: block;
+    background: #ffffff;
+  }
+  path {
+    fill: rgba(0,0,0,0.05);
+    stroke: black;
+    stroke-width: 1;
+  }
+  text {
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    fill: #111827;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<svg id="svg"></svg>
+
+<script>
+async function run() {
+  const geojson = await fetch("churches.geojson").then(r => r.json());
+
+  // ---------- Geometry helpers ----------
+  function area(coords) {
+    let a = 0;
+    for (let i = 0; i < coords.length; i++) {
+      const [x1, y1] = coords[i];
+      const [x2, y2] = coords[(i + 1) % coords.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(a / 2);
+  }
+
+  function centroid(coords) {
+    let x = 0, y = 0;
+    coords.forEach(([cx, cy]) => { x += cx; y += cy; });
+    return [x / coords.length, y / coords.length];
+  }
+
+  function normalize(coords) {
+    const [cx, cy] = centroid(coords);
+    return coords.map(([x, y]) => [x - cx, y - cy]);
+  }
+
+  function bounds(coords) {
+    const xs = coords.map(c => c[0]);
+    const ys = coords.map(c => c[1]);
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys)
+    };
+  }
+
+  // ---------- Extract polygons & compute area ----------
+  geojson.features.forEach(f => {
+    const poly =
+      f.geometry.type === "Polygon"
+        ? f.geometry.coordinates[0]
+        : f.geometry.coordinates[0][0];
+    f._coords = poly;
+    f._area = area(poly);
+  });
+
+  // ---------- Sort largest → smallest ----------
+  geojson.features.sort((a, b) => b._area - a._area);
+
+  const svg = document.getElementById("svg");
+  const screenWidth = window.innerWidth;
+
+  const padding = 24;
+  const cardGap = 32;
+  const labelHeight = 18;
+  const rowBottomPadding = 20;
+  const cardsPerRow = 4;
+
+  const cardWidth =
+    (screenWidth - padding * 2 - cardGap * (cardsPerRow - 1)) / cardsPerRow;
+
+  // ---------- Global scale ----------
+  const maxDimension = Math.max(
+    ...geojson.features.map(f => {
+      const b = bounds(f._coords);
+      return Math.max(b.w, b.h);
+    })
+  );
+
+  const maxPolySize = cardWidth * 0.85;
+  const globalScale = maxPolySize / maxDimension;
+
+  let cursorY = padding;
+  let maxY = 0;
+
+  // ---------- Draw row by row ----------
+  for (let row = 0; row < Math.ceil(geojson.features.length / cardsPerRow); row++) {
+    const start = row * cardsPerRow;
+    const end = Math.min(start + cardsPerRow, geojson.features.length);
+    const rowFeatures = geojson.features.slice(start, end);
+
+    // Height determined by first (largest) polygon
+    const firstBounds = bounds(normalize(rowFeatures[0]._coords));
+    const maxRowPolyHeight = firstBounds.h * globalScale;
+
+    const rowHeight = maxRowPolyHeight + labelHeight + rowBottomPadding;
+
+    rowFeatures.forEach((f, col) => {
+      const cursorX = padding + col * (cardWidth + cardGap);
+
+      let coords = normalize(f._coords);
+      const b = bounds(coords);
+
+      const polyWidth = b.w * globalScale;
+      const polyHeight = b.h * globalScale;
+
+      // ---- Vertical centering within the row ----
+      const verticalOffset =
+        (maxRowPolyHeight - polyHeight) / 2;
+
+      const offsetX = cursorX + (cardWidth - polyWidth) / 2;
+      const offsetY = cursorY + verticalOffset;
+
+      const scaled = coords.map(([x, y]) => [
+        (x - b.minX) * globalScale + offsetX,
+        (y - b.minY) * globalScale + offsetY
+      ]);
+
+      const d = scaled
+        .map((c, i) => `${i === 0 ? "M" : "L"} ${c[0]} ${c[1]}`)
+        .join(" ") + " Z";
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+
+      // ---- Label ----
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", cursorX + cardWidth / 2);
+      text.setAttribute("y", offsetY + polyHeight + labelHeight);
+      text.setAttribute("text-anchor", "middle");
+      text.textContent = f.properties?.name ?? "Unnamed";
+      svg.appendChild(text);
+    });
+
+    cursorY += rowHeight;
+    maxY = cursorY + padding;
+  }
+
+  svg.setAttribute("height", maxY);
+}
+
+run();
+</script>
+
+</body>
+</html>
