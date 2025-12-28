@@ -28,7 +28,7 @@
     stroke-width: 1;
   }
 
-  .label-bg {
+  .label-band {
     fill: black;
   }
 
@@ -108,8 +108,7 @@ async function run() {
   const cardsPerRow = 4;
 
   const innerPadding = 16;
-  const labelHeight = 22;
-  const rowBottomPadding = 20;
+  const labelBandHeight = 28;
 
   const cardWidth =
     (screenWidth - padding * 2 - cardGap * (cardsPerRow - 1)) / cardsPerRow;
@@ -141,10 +140,9 @@ async function run() {
     const cardHeight =
       innerPadding +
       maxRowPolyHeight +
-      labelHeight +
-      rowBottomPadding;
+      innerPadding +
+      labelBandHeight;
 
-    // shared row centerline
     const rowCenterY =
       cursorY + innerPadding + maxRowPolyHeight / 2;
 
@@ -187,32 +185,24 @@ async function run() {
       path.setAttribute("d", d);
       svg.appendChild(path);
 
-      // ----- label -----
-      const labelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      // ----- label band -----
+      const bandY = cursorY + cardHeight - labelBandHeight;
+
+      const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      band.setAttribute("x", cursorX);
+      band.setAttribute("y", bandY);
+      band.setAttribute("width", cardWidth);
+      band.setAttribute("height", labelBandHeight);
+      band.setAttribute("class", "label-band");
+      svg.appendChild(band);
 
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
       text.setAttribute("x", cursorX + cardWidth / 2);
-      text.setAttribute(
-        "y",
-        cursorY + cardHeight - rowBottomPadding / 2
-      );
+      text.setAttribute("y", bandY + labelBandHeight / 2 + 4);
       text.setAttribute("text-anchor", "middle");
       text.setAttribute("class", "label-text");
       text.textContent = f.properties?.name ?? "Unnamed";
-
       svg.appendChild(text);
-      const bbox = text.getBBox();
-
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("x", bbox.x - 6);
-      bg.setAttribute("y", bbox.y - 3);
-      bg.setAttribute("width", bbox.width + 12);
-      bg.setAttribute("height", bbox.height + 6);
-      bg.setAttribute("class", "label-bg");
-
-      labelGroup.appendChild(bg);
-      labelGroup.appendChild(text);
-      svg.appendChild(labelGroup);
     });
 
     cursorY += cardHeight + cardGap;
