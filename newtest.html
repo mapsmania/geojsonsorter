@@ -135,11 +135,11 @@ async function run() {
       const polyHeight = b.h * globalScale;
 
       // ---- Vertical centering within the row ----
-      const verticalOffset =
-        (maxRowPolyHeight - polyHeight) / 2;
+      const rowCenterY = cursorY + maxRowPolyHeight / 2;
 
       const offsetX = cursorX + (cardWidth - polyWidth) / 2;
-      const offsetY = cursorY + verticalOffset;
+      const offsetY = rowCenterY - polyHeight / 2;
+
 
       const scaled = coords.map(([x, y]) => [
         (x - b.minX) * globalScale + offsetX,
